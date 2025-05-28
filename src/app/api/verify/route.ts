@@ -34,7 +34,7 @@ function verifySignatureBIP322(address: string, messageHash: Buffer, signatureBa
 
     if (recovery < 0 || recovery > 3) throw new Error('Invalid recovery byte');
 
-    const pubkey = secp.recover(messageHash, compactSig, recovery, true);
+const pubkey = secp.recover(messageHash, compactSig, recovery as 0 | 1 | 2 | 3, true);
     if (!pubkey) throw new Error('Recovery failed');
 
     const { address: derived } = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(pubkey) });
