@@ -11,6 +11,7 @@
   "dependencies": {
     "@noble/curves": "^1.9.1",
     "@noble/secp256k1": "^2.2.3",
+    "bitcoinjs-message": "^2.2.0",
     "next": "15.3.2",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

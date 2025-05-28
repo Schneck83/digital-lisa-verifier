@@ -1,9 +1,6 @@
-import { secp256k1 } from '@noble/curves/secp256k1';
+import * as bitcoinMessage from 'bitcoinjs-message';
 import { NextRequest, NextResponse } from 'next/server';
-import { createHash } from 'crypto';
 import { Buffer } from 'buffer';
-import { verify } from '@noble/secp256k1';
-import { utils } from '@noble/secp256k1';
 
 
 
@@ -55,10 +52,17 @@ if (!sigRes.ok) {
 const sigData = await sigRes.json();
     const pubKey = sigData.public_key;
     const signatureDer = Buffer.from(sigData.signature, 'base64');
-    const signatureRaw = secp256k1.Signature.fromDER(signatureDer).toCompactRawBytes();
     const hash = Buffer.from(jsonData.anchor_hash, 'hex');
-    const validSignature = await verify(signatureRaw, hash, pubKey);
-    return NextResponse.json({
+    const signatureBase64 = sigData.signature;
+    const address = sigData.address;
+    const anchorHash = jsonData.anchor_hash;
+
+// Umwandlung zu Buffer für die Verifikation
+const message = Buffer.from(anchorHash, 'hex'); // Anchor-Hash als Message
+const signature = Buffer.from(signatureBase64, 'base64');
+
+// Bitcoin-style Message Verification
+const validSignature = bitcoinMessage.verify(message, address, signature);    return NextResponse.json({
       lisaId,
       anchorName: jsonData.name,
       imagePreview: jsonData.image_preview,
