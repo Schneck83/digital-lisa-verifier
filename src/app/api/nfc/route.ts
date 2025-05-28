@@ -11,7 +11,7 @@ function bitcoinMessageHash(message: string): Buffer {
   const messageBuffer = Buffer.from(message, 'utf8');
 
   const lengthEncoded = varuint.encode(messageBuffer.length);
-  const lengthBuffer = Buffer.from(lengthEncoded);
+  const lengthBuffer = Buffer.from(lengthEncoded.buffer, lengthEncoded.byteOffset, lengthEncoded.bytes);
 
   const buffer = Buffer.concat([prefix, lengthBuffer, messageBuffer]);
   const hash1 = createHash('sha256').update(buffer).digest();
