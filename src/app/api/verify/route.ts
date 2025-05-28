@@ -1,4 +1,4 @@
-import { derToRS } from 'deribit-bitcoin-signature';
+import { secp256k1 } from '@noble/curves/secp256k1';
 import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { Buffer } from 'buffer';
@@ -55,7 +55,7 @@ if (!sigRes.ok) {
 const sigData = await sigRes.json();
     const pubKey = sigData.public_key;
     const signatureDer = Buffer.from(sigData.signature, 'base64');
-    const signatureRaw = derToRS(signatureDer);
+    const signatureRaw = secp256k1.Signature.fromDER(signatureDer).toCompactRawBytes();
     const hash = Buffer.from(jsonData.anchor_hash, 'hex');
     const validSignature = await verify(signatureRaw, hash, pubKey);
     return NextResponse.json({
