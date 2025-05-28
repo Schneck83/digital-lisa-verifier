@@ -2,6 +2,25 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createHash } from 'crypto';
 import { Buffer } from 'buffer';
 import { verify } from '@noble/secp256k1';
+import { utils } from '@noble/secp256k1';
+
+// 🔁 Wandelt eine DER-codierte Signatur (z. B. von Ledger) in 64-Byte "raw" um
+function derToRawSignature(der: Uint8Array): Uint8Array {
+  const hex = utils.bytesToHex(der);
+  try {
+    if (hex.startsWith('30')) {
+      const rLen = parseInt(hex.slice(6, 8), 16);
+      const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
+      const sOffset = 8 + rLen * 2 + 2;
+      const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
+      const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
+      return utils.hexToBytes(r + s);
+    }
+  } catch (e) {
+    console.error('DER parsing failed:', e);
+  }
+  throw new Error('Invalid DER signature format');
+}
 
 // Mapping Lisa-ID → Arweave TX-IDs
 function getLisaTx(id: string): { json: string, sig: string } {
@@ -50,11 +69,10 @@ if (!sigRes.ok) {
 }
 const sigData = await sigRes.json();
     const pubKey = sigData.public_key;
-    const signature = Buffer.from(sigData.signature, 'base64').toString('hex');
+    const signatureDer = Buffer.from(sigData.signature, 'base64');
+    const signatureRaw = derToRawSignature(signatureDer);
     const hash = sha256(jsonText);
-
-    const validSignature = await verify(signature, hash, pubKey);
-
+    const validSignature = await verify(signatureRaw, hash, pubKey);
     return NextResponse.json({
       lisaId,
       anchorName: jsonData.name,
