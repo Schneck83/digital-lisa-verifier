@@ -27,7 +27,6 @@ function verifySignature(
   const sig = Buffer.from(signatureBase64, 'base64');
   // WICHTIG: pubkey als Uint8Array, nicht als Buffer
   const pubkey = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
-
   console.log('Signature length (bytes):', sig.length);
   console.log('Message hash:', messageHash.toString('hex'));
 
