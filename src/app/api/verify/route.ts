@@ -36,7 +36,9 @@ function verifyFlexibleSignature(
 
     const compactSig = sig.slice(1);
     try {
-      const recoveredPubkey = Buffer.from(secp.recover(messageHash, compactSig, recovery as 0 | 1 | 2 | 3, true));
+      const recoveredPubkeyRaw = secp.recover(messageHash, compactSig, recovery as 0 | 1 | 2 | 3, true);
+      if (!recoveredPubkeyRaw) throw new Error('Recovery failed');
+      const recoveredPubkey = Buffer.from(recoveredPubkeyRaw);
       const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
       if (derivedAddress !== address) return false;
       return secp.verify(compactSig, messageHash, pubkey);
