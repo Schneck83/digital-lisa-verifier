@@ -33,11 +33,11 @@ export async function GET(req: NextRequest) {
 }
 
 // Einfacher SHA256-Wrapper
-function sha256(buffer: Buffer): Buffer {
-  const crypto = require('crypto');
-  return crypto.createHash('sha256').update(buffer).digest();
-}
+import { createHash } from 'crypto';
 
+function sha256(buffer: Buffer): Buffer {
+  return createHash('sha256').update(buffer).digest();
+}
 const validSignature = verifySignature(pubKey, signature, jsonText);
   const creatorKey = anchorData?.creator?.public_key;
 
