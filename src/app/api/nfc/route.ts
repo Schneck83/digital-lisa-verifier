@@ -3,7 +3,7 @@ import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createHash } from 'crypto';
 import * as secp from 'noble-secp256k1';
-import varuint from 'varuint-bitcoin';
+import * as varuint from 'varuint-bitcoin';
 
 // Bitcoin-Message Hash nach BIP322 mit VarInt Länge
 function bitcoinMessageHash(message: string): Buffer {
