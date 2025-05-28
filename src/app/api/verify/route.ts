@@ -2,19 +2,24 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import { verify } from '@noble/secp256k1';
 
-// 🔁 DER → RAW Signaturkonvertierung (Ledger-kompatibel)
-function derToRawSignature(der: Uint8Array): Uint8Array {
-  const hex = Buffer.from(der).toString('hex');
-  if (!hex.startsWith('30')) throw new Error('Not a DER signature');
-  const rLen = parseInt(hex.slice(6, 8), 16);
-  const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
-  const sOffset = 8 + rLen * 2 + 2;
-  const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
-  const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
-  return Buffer.from(r + s, 'hex');
+// 📥 Signatur: entweder DER oder 64 Byte RAW → automatisch erkannt
+function parseSignature(sigBase64: string): Uint8Array {
+  const sig = Buffer.from(sigBase64, 'base64');
+  if (sig.length === 64) {
+    return sig; // bereits RAW
+  } else {
+    const hex = sig.toString('hex');
+    if (!hex.startsWith('30')) throw new Error('Not a DER signature');
+    const rLen = parseInt(hex.slice(6, 8), 16);
+    const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
+    const sOffset = 8 + rLen * 2 + 2;
+    const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
+    const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
+    return Buffer.from(r + s, 'hex');
+  }
 }
 
-// Lisa → Arweave TX mapping
+// Lisa-ID Mapping zu Arweave TXs
 function getLisaTx(id: string): { json: string; sig: string } {
   if (id === '0001') return {
     json: 'xXXekbk0xxUKia4EFkMfbWdbi1Pwn5GULAJJ5J-TXiI',
@@ -44,21 +49,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown Lisa ID' }, { status: 404 });
     }
 
-    // JSON-Anchor laden
     const jsonRes = await fetch(`https://arweave.net/${tx.json}`);
     const jsonText = await jsonRes.text();
     const jsonData = JSON.parse(jsonText);
 
-    // Signature-Datei laden
     const sigRes = await fetch(`https://arweave.net/${tx.sig}`);
     if (!sigRes.ok) throw new Error(`Signature file not found`);
     const sigData = await sigRes.json();
 
-    const anchorHash = jsonData.anchor_hash;
+    const hash = Buffer.from(jsonData.anchor_hash, 'hex');
     const pubKey = sigData.public_key;
-    const signatureDer = Buffer.from(sigData.signature, 'base64');
-    const signatureRaw = derToRawSignature(signatureDer);
-    const hash = Buffer.from(anchorHash, 'hex');
+    const signatureRaw = parseSignature(sigData.signature);
 
     const validSignature = await verify(signatureRaw, hash, pubKey);
 
@@ -73,6 +74,7 @@ export async function GET(req: NextRequest) {
     });
 
   } catch (err: any) {
+    console.error('Auto-verification error:', err);
     return NextResponse.json({
       error: 'Internal Server Error',
       message: err.message,
