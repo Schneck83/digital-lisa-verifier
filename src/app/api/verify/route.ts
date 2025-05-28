@@ -46,7 +46,8 @@ export async function GET(req: NextRequest) {
     console.error('API VERIFY ERROR:', err);
     return NextResponse.json({
       error: 'Internal Server Error',
-      message: err.message,
+      message: err.message || 'Unknown error',
+      stack: err.stack || null,
     }, { status: 500 });
   }
 }
