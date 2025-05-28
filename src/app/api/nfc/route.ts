@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createHash } from 'crypto';
-import * as tinySecp from 'tiny-secp256k1';
+import * as secp from '@noble/secp256k1';
 
 // Bitcoin-Message Hash nach BIP322
 function bitcoinMessageHash(message: string): Buffer {
@@ -21,7 +21,6 @@ async function verifySignature(
   messageHash: Buffer
 ): Promise<boolean> {
   const sig = Buffer.from(signatureBase64, 'base64');
-  const pubkeyCompressed = Buffer.from(pubKeyHex, 'hex');
 
   if (sig.length !== 65) {
     console.log('Ungültige Signaturlänge:', sig.length);
@@ -37,21 +36,28 @@ async function verifySignature(
   const compactSig = sig.slice(1);
 
   try {
-    // Public Key aus Signatur + Hash rekonstruieren
-    const recoveredPubkey = tinySecp.recoverPublicKey(messageHash, compactSig, recovery);
+    // Public Key als Uint8Array
+    const pubkeyCompressed = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
+    // Unkomprimierten Public Key (64 Byte) extrahieren
+    const pubkey = secp.Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
 
-    // Abgeleitete Adresse aus recovered Pubkey
-    const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
+    // Public Key aus Signatur & Hash rekonstruieren
+    const recoveredPubkeyCompressed = secp.recoverPublicKey(messageHash, compactSig, recovery, true);
 
-    // Prüfe, ob recovered Address gleich der vom User angegebenen ist
-    const originalAddress = bitcoin.payments.p2wpkh({ pubkey: pubkeyCompressed }).address;
+    // Unkomprimierten recovered Public Key
+    const recoveredPubkey = secp.Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
+
+    // Adressen ableiten
+    const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
+    const originalAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(pubkey) }).address;
+
     if (derivedAddress !== originalAddress) {
-      console.log('Recovered address stimmt nicht überein');
+      console.log('Recovered address stimmt nicht mit Original überein');
       return false;
     }
 
-    // Verifiziere Signatur (ohne Recovery Byte) gegen Public Key
-    return tinySecp.verifySignature(compactSig, messageHash, pubkeyCompressed);
+    // Signatur validieren
+    return await secp.verify(compactSig, messageHash, pubkey);
   } catch (e) {
     console.log('Fehler bei Verifikation:', e);
     return false;
