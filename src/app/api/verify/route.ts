@@ -71,7 +71,7 @@ const sigData = await sigRes.json();
     const pubKey = sigData.public_key;
     const signatureDer = Buffer.from(sigData.signature, 'base64');
     const signatureRaw = derToRawSignature(signatureDer);
-    const hash = sha256(jsonText);
+    const hash = Buffer.from(jsonData.anchor_hash, 'hex');
     const validSignature = await verify(signatureRaw, hash, pubKey);
     return NextResponse.json({
       lisaId,
