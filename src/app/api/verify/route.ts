@@ -28,16 +28,16 @@ function verifySignatureBIP322(address: string, messageHash: Buffer, signatureBa
   try {
     const sig = Buffer.from(signatureBase64, 'base64');
 
-    // 65-Byte: Compact + Recovery → Recovery Byte abspalten
     if (sig.length !== 65) throw new Error('Unexpected signature length');
     const recovery = sig[0] - 27;
-    const signature = sig.slice(1);
+    const compactSig = sig.slice(1); // 64-Byte Compact Format
 
     if (recovery < 0 || recovery > 3) throw new Error('Invalid recovery byte');
 
-    // PubKey aus Recovery wiederherstellen
-    const pubkey = Buffer.from(secp.recoverPublicKey(messageHash, signature, recovery, true));
-    const { address: derived } = bitcoin.payments.p2wpkh({ pubkey });
+    const pubkey = secp.recover(messageHash, compactSig, recovery, true);
+    if (!pubkey) throw new Error('Recovery failed');
+
+    const { address: derived } = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(pubkey) });
 
     return derived === address;
   } catch (err) {
