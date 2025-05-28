@@ -21,11 +21,6 @@ function getLisaTx(id: string): { json: string, sig: string } {
   return { json: '', sig: '' };
 }
 
-// Hilfsfunktion: SHA256 für Nachricht
-function sha256(msg: string): Uint8Array {
-  return createHash('sha256').update(msg).digest();
-}
-
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
