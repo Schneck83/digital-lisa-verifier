@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as secp256k1 from 'tiny-secp256k1';
+import { verify, utils } from '@noble/secp256k1';
 import { Buffer } from 'buffer';
 import { createHash } from 'crypto';
 
@@ -31,8 +31,7 @@ export async function GET(req: NextRequest) {
     const anchorData = JSON.parse(jsonText);
 
     const isCreatorPubKey = anchorData?.creator?.public_key === pubKey;
-    const validSignature = verifySignature(pubKey, signature, jsonText);
-
+    const validSignature = await verifySignature(pubKey, signature, jsonText);
     return NextResponse.json({
       validSignature,
       isCreatorPubKey,
@@ -53,12 +52,11 @@ export async function GET(req: NextRequest) {
 }
 
 // Signature verification logic
-function verifySignature(pubKeyHex: string, sigBase64: string, message: string): boolean {
+async function verifySignature(pubKeyHex: string, sigBase64: string, message: string): Promise<boolean> {
   try {
-    const pubKeyBuffer = Buffer.from(pubKeyHex, 'hex');
-    const sigBuffer = Buffer.from(sigBase64, 'base64');
     const msgHash = sha256(Buffer.from(message));
-    return secp256k1.verify(sigBuffer, msgHash, pubKeyBuffer);
+    const sig = Buffer.from(sigBase64, 'base64').toString('hex');
+    return await verify(sig, msgHash, pubKeyHex);
   } catch (e) {
     console.error('Signature verification failed:', e);
     return false;
