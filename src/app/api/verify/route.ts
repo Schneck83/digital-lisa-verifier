@@ -1,7 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
-import * as bitcoin from 'bitcoinjs-lib';
+import { verify } from '@noble/secp256k1';
 
+// 🔁 DER → RAW Signaturkonvertierung (Ledger-kompatibel)
+function derToRawSignature(der: Uint8Array): Uint8Array {
+  const hex = Buffer.from(der).toString('hex');
+  if (!hex.startsWith('30')) throw new Error('Not a DER signature');
+  const rLen = parseInt(hex.slice(6, 8), 16);
+  const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
+  const sOffset = 8 + rLen * 2 + 2;
+  const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
+  const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
+  return Buffer.from(r + s, 'hex');
+}
+
+// Lisa → Arweave TX mapping
 function getLisaTx(id: string): { json: string; sig: string } {
   if (id === '0001') return {
     json: 'xXXekbk0xxUKia4EFkMfbWdbi1Pwn5GULAJJ5J-TXiI',
@@ -31,46 +44,31 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown Lisa ID' }, { status: 404 });
     }
 
-    // Lade JSON-Anchor
+    // JSON-Anchor laden
     const jsonRes = await fetch(`https://arweave.net/${tx.json}`);
     const jsonText = await jsonRes.text();
     const jsonData = JSON.parse(jsonText);
 
-    // Lade Signature-Datei
+    // Signature-Datei laden
     const sigRes = await fetch(`https://arweave.net/${tx.sig}`);
     if (!sigRes.ok) throw new Error(`Signature file not found`);
     const sigData = await sigRes.json();
 
-    const address = sigData.address;
-    const signature = sigData.signature;
     const anchorHash = jsonData.anchor_hash;
+    const pubKey = sigData.public_key;
+    const signatureDer = Buffer.from(sigData.signature, 'base64');
+    const signatureRaw = derToRawSignature(signatureDer);
+    const hash = Buffer.from(anchorHash, 'hex');
 
-    const msgPrefix = '\x18Bitcoin Signed Message:\n';
-    const message = Buffer.from(anchorHash, 'hex');
-    const lengthBuffer = Buffer.from([message.length]);
-    const messageBuffer = Buffer.concat([
-      Buffer.from(msgPrefix),
-      lengthBuffer,
-      message,
-    ]);
-    const hash = bitcoin.crypto.sha256(bitcoin.crypto.sha256(messageBuffer));
-
-    let validSignature = false;
-try {
-  const sig = Buffer.from(signature, 'base64');
-  // TODO: Echte BIP322-Prüfung hier einbauen
-  // validSignature = prüfeSignatur(sig, hash, address);
-} catch (err) {
-  validSignature = false;
-}
+    const validSignature = await verify(signatureRaw, hash, pubKey);
 
     return NextResponse.json({
       lisaId,
       anchorName: jsonData.name,
       imagePreview: jsonData.image_preview,
       hqKeyRequestUrl: jsonData.hq_key_request_url,
-      address,
-      signature,
+      pubKey,
+      signature: sigData.signature,
       validSignature
     });
 
