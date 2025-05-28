@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
-import * as tinySecp from 'tiny-secp256k1';
-import * as secp from '@noble/secp256k1';
+import * as secp from '@bitcoinerlab/secp256k1';
 
-bitcoin.initEccLib(tinySecp);
-
+// Lisa-ID zu Arweave Transaktionen
 function getLisaTx(id: string): { json: string; sig: string } {
   if (id === '0001') return {
     json: 'xXXekbk0xxUKia4EFkMfbWdbi1Pwn5GULAJJ5J-TXiI',
@@ -22,44 +20,41 @@ function getLisaTx(id: string): { json: string; sig: string } {
   return { json: '', sig: '' };
 }
 
-// Flexible Signaturparser & Verifikation
-async function verifyFlexibleSignature(
+// Verifikation mit BIP322 kompatibler Signatur
+function verifyFlexibleSignature(
   address: string,
   messageHash: Buffer,
   signatureBase64: string,
   pubKeyHex: string
-): Promise<boolean> {
+): boolean {
   const sig = Buffer.from(signatureBase64, 'base64');
   const pubkey = Buffer.from(pubKeyHex, 'hex');
 
-  // 1. Prüfe kompakte 65-Byte Signatur mit Recovery-Byte
   if (sig.length === 65) {
+    const recovery = (sig[0] - 27) % 4;
+    if (recovery < 0 || recovery > 3) return false;
+
+    const compactSig = sig.slice(1);
     try {
-      const recovery = (sig[0] - 27) % 4;
-      if (recovery < 0 || recovery > 3) throw new Error('Invalid recovery byte');
-      const compactSig = sig.slice(1);
-      const recoveredPubkey = Buffer.from(tinySecp.recoverPublicKey(messageHash, compactSig, recovery));
+      const recoveredPubkey = Buffer.from(secp.recover(messageHash, compactSig, recovery as 0 | 1 | 2 | 3, true));
       const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
       if (derivedAddress !== address) return false;
       return secp.verify(compactSig, messageHash, pubkey);
     } catch {
-      // Falls Fehler, einfach weiter prüfen
+      return false;
     }
   }
 
-  // 2. Prüfe 64-Byte RAW Signatur
   if (sig.length === 64) {
     try {
       return secp.verify(sig, messageHash, pubkey);
     } catch {
-      // Falls Fehler, weiter prüfen
+      return false;
     }
   }
 
-  // 3. Versuche DER Format zu parsen und zu verifizieren
   if (sig.length >= 65 && sig.length <= 72 && sig[0] === 0x30) {
     try {
-      // DER → Raw umwandeln
       const hex = sig.toString('hex');
       const rLen = parseInt(hex.slice(6, 8), 16);
       const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
@@ -73,7 +68,6 @@ async function verifyFlexibleSignature(
     }
   }
 
-  // Wenn alles fehlschlägt, Signatur ungültig
   return false;
 }
 
@@ -81,14 +75,10 @@ export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
     const lisaId = searchParams.get('lisa');
-    if (!lisaId) {
-      return NextResponse.json({ error: 'Missing Lisa ID' }, { status: 400 });
-    }
+    if (!lisaId) return NextResponse.json({ error: 'Missing Lisa ID' }, { status: 400 });
 
     const tx = getLisaTx(lisaId);
-    if (!tx.json || !tx.sig) {
-      return NextResponse.json({ error: 'Unknown Lisa ID' }, { status: 404 });
-    }
+    if (!tx.json || !tx.sig) return NextResponse.json({ error: 'Unknown Lisa ID' }, { status: 404 });
 
     const jsonRes = await fetch(`https://arweave.net/${tx.json}`);
     const jsonText = await jsonRes.text();
@@ -103,7 +93,7 @@ export async function GET(req: NextRequest) {
     const address = sigData.address;
     const signature = sigData.signature;
 
-    const validSignature = await verifyFlexibleSignature(address, anchorHash, signature, pubKey);
+    const validSignature = verifyFlexibleSignature(address, anchorHash, signature, pubKey);
 
     return NextResponse.json({
       lisaId,
