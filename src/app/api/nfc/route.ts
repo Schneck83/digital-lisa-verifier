@@ -40,6 +40,10 @@ async function verifySignature(
     const pubkey = secp.Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
 
     const recoveredPubkeyCompressed = secp.recoverPublicKey(messageHash, compactSig, recovery);
+    if (!recoveredPubkeyCompressed) {
+      console.log('Fehler: Konnte Public Key nicht rekonstruieren');
+      return false;
+    }
     const recoveredPubkey = secp.Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
 
     const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
