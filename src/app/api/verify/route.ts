@@ -22,28 +22,59 @@ function getLisaTx(id: string): { json: string; sig: string } {
   return { json: '', sig: '' };
 }
 
-// Hilfsfunktion: konvertiert DER-Signatur in raw 64-Byte Buffer
-function derToRawSignature(der: Uint8Array): Uint8Array {
-  const hex = Buffer.from(der).toString('hex');
-  if (!hex.startsWith('30')) throw new Error('Not a DER signature');
-  const rLen = parseInt(hex.slice(6, 8), 16);
-  const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
-  const sOffset = 8 + rLen * 2 + 2;
-  const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
-  const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
-  return Buffer.from(r + s, 'hex');
-}
+// Flexible Signaturparser & Verifikation
+async function verifyFlexibleSignature(
+  address: string,
+  messageHash: Buffer,
+  signatureBase64: string,
+  pubKeyHex: string
+): Promise<boolean> {
+  const sig = Buffer.from(signatureBase64, 'base64');
+  const pubkey = Buffer.from(pubKeyHex, 'hex');
 
-function verifyDERSignature(address: string, messageHash: Buffer, signatureBase64: string, pubKeyHex: string): boolean {
-  try {
-    const signature = Buffer.from(signatureBase64, 'base64');
-    const pubkey = Buffer.from(pubKeyHex, 'hex');
-    const signatureRaw = derToRawSignature(signature);
-    return secp.verify(signatureRaw, messageHash, pubkey);
-  } catch (err) {
-    console.error('verifyDERSignature error:', err);
-    return false;
+  // 1. Prüfe kompakte 65-Byte Signatur mit Recovery-Byte
+  if (sig.length === 65) {
+    try {
+      const recovery = (sig[0] - 27) % 4;
+      if (recovery < 0 || recovery > 3) throw new Error('Invalid recovery byte');
+      const compactSig = sig.slice(1);
+      const recoveredPubkey = Buffer.from(secp.recover(messageHash, compactSig, recovery, true));
+      const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
+      if (derivedAddress !== address) return false;
+      return secp.verify(compactSig, messageHash, pubkey);
+    } catch {
+      // Falls Fehler, einfach weiter prüfen
+    }
   }
+
+  // 2. Prüfe 64-Byte RAW Signatur
+  if (sig.length === 64) {
+    try {
+      return secp.verify(sig, messageHash, pubkey);
+    } catch {
+      // Falls Fehler, weiter prüfen
+    }
+  }
+
+  // 3. Versuche DER Format zu parsen und zu verifizieren
+  if (sig.length >= 65 && sig.length <= 72 && sig[0] === 0x30) {
+    try {
+      // DER → Raw umwandeln
+      const hex = sig.toString('hex');
+      const rLen = parseInt(hex.slice(6, 8), 16);
+      const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
+      const sOffset = 8 + rLen * 2 + 2;
+      const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
+      const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
+      const rawSig = Buffer.from(r + s, 'hex');
+      return secp.verify(rawSig, messageHash, pubkey);
+    } catch {
+      return false;
+    }
+  }
+
+  // Wenn alles fehlschlägt, Signatur ungültig
+  return false;
 }
 
 export async function GET(req: NextRequest) {
@@ -72,7 +103,7 @@ export async function GET(req: NextRequest) {
     const address = sigData.address;
     const signature = sigData.signature;
 
-    const validSignature = verifyDERSignature(address, anchorHash, signature, pubKey);
+    const validSignature = await verifyFlexibleSignature(address, anchorHash, signature, pubKey);
 
     return NextResponse.json({
       lisaId,
@@ -84,6 +115,7 @@ export async function GET(req: NextRequest) {
       signature,
       validSignature
     });
+
   } catch (err: any) {
     console.error('Auto-verification error:', err);
     return NextResponse.json({
