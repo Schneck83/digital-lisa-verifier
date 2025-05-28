@@ -39,7 +39,7 @@ async function verifySignature(
     const pubkeyCompressed = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
     const pubkey = secp.Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
 
-    const recoveredPubkeyCompressed = secp.recoverPublicKey(messageHash, compactSig, recovery, true);
+    const recoveredPubkeyCompressed = secp.recoverPublicKey(messageHash, compactSig, recovery);
     const recoveredPubkey = secp.Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
 
     const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
