@@ -27,15 +27,15 @@ async function verifySignature(
     return false;
   }
 
-  // Recovery Byte berechnen und modulo 4, falls nötig
-  let recovery = sig[0] - 27;
-  console.log('Raw recovery byte:', sig[0]);
+  let recovery = sig[0];
+
+  if (recovery > 30) {
+    recovery = recovery - 27;
+  }
+
   if (recovery < 0 || recovery > 3) {
-    recovery = recovery % 4;
-    if (recovery < 0 || recovery > 3) {
-      console.log('Ungültiges Recovery-Byte nach Modulo:', sig[0]);
-      return false;
-    }
+    console.log('Ungültiges Recovery-Byte:', sig[0], 'nach Anpassung:', recovery);
+    return false;
   }
 
   const compactSig = sig.slice(1);
