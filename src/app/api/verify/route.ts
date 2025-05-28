@@ -38,7 +38,7 @@ async function verifyFlexibleSignature(
       const recovery = (sig[0] - 27) % 4;
       if (recovery < 0 || recovery > 3) throw new Error('Invalid recovery byte');
       const compactSig = sig.slice(1);
-      const recoveredPubkey = Buffer.from(secp.recover(messageHash, compactSig, recovery, true));
+      const recoveredPubkey = Buffer.from(tinySecp.recoverPublicKey(messageHash, compactSig, recovery));
       const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
       if (derivedAddress !== address) return false;
       return secp.verify(compactSig, messageHash, pubkey);
