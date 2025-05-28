@@ -3,7 +3,6 @@ import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
 import * as tinySecp from 'tiny-secp256k1';
 import * as secp from '@noble/secp256k1';
-import { Signature } from '@noble/secp256k1';
 
 bitcoin.initEccLib(tinySecp);
 
@@ -23,12 +22,24 @@ function getLisaTx(id: string): { json: string; sig: string } {
   return { json: '', sig: '' };
 }
 
+// Hilfsfunktion: konvertiert DER-Signatur in raw 64-Byte Buffer
+function derToRawSignature(der: Uint8Array): Uint8Array {
+  const hex = Buffer.from(der).toString('hex');
+  if (!hex.startsWith('30')) throw new Error('Not a DER signature');
+  const rLen = parseInt(hex.slice(6, 8), 16);
+  const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
+  const sOffset = 8 + rLen * 2 + 2;
+  const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
+  const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
+  return Buffer.from(r + s, 'hex');
+}
+
 function verifyDERSignature(address: string, messageHash: Buffer, signatureBase64: string, pubKeyHex: string): boolean {
   try {
     const signature = Buffer.from(signatureBase64, 'base64');
     const pubkey = Buffer.from(pubKeyHex, 'hex');
-    const sig = Signature.fromDER(signature);
-    return secp.verify(sig, messageHash, pubkey);
+    const signatureRaw = derToRawSignature(signature);
+    return secp.verify(signatureRaw, messageHash, pubkey);
   } catch (err) {
     console.error('verifyDERSignature error:', err);
     return false;
