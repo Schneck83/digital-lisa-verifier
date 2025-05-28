@@ -44,7 +44,14 @@ async function verifySignature(
     }
     const compactSig = sig.slice(1);
     try {
-const recoveredPubkeyCompressed = recoverPublicKey(messageHash, compactSig, recovery);      const recoveredPubkey = Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
+const recoveredPubkeyCompressed = recoverPublicKey(messageHash, compactSig, recovery);
+
+if (!recoveredPubkeyCompressed) {
+  console.log('Failed to recover public key');
+  return false;
+}
+      
+const recoveredPubkey = Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
 
       const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
       console.log('Derived address from recovery:', derivedAddress);
