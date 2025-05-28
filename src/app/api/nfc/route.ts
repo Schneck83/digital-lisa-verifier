@@ -9,8 +9,11 @@ import * as varuint from 'varuint-bitcoin';
 function bitcoinMessageHash(message: string): Buffer {
   const prefix = Buffer.from('\x18Bitcoin Signed Message:\n', 'utf8');
   const messageBuffer = Buffer.from(message, 'utf8');
+
+  // varuint.encode gibt Uint8Array zurück mit .buffer, .byteOffset, .byteLength
   const lengthEncoded = varuint.encode(messageBuffer.length);
-  const lengthBuffer = Buffer.from(lengthEncoded.buffer);
+  const lengthBuffer = Buffer.from(lengthEncoded.buffer, lengthEncoded.byteOffset, lengthEncoded.byteLength);
+
   const buffer = Buffer.concat([prefix, lengthBuffer, messageBuffer]);
   const hash1 = createHash('sha256').update(buffer).digest();
   const hash2 = createHash('sha256').update(hash1).digest();
