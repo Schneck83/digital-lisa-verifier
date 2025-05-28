@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
-import * as secp from '@bitcoinerlab/secp256k1';
-import * as tinySecp from 'tiny-secp256k1';
 import { createHash } from 'crypto';
-
-bitcoin.initEccLib(tinySecp);
+import { Point, verify as nobleVerify } from 'noble-secp256k1';
 
 // Bitcoin-Message Hash nach BIP322
 function bitcoinMessageHash(message: string): Buffer {
@@ -19,18 +16,18 @@ function bitcoinMessageHash(message: string): Buffer {
 }
 
 // Kompakte Signatur-Verifikation mit Recovery
-function verifySignature(
+async function verifySignature(
   pubKeyHex: string,
   signatureBase64: string,
   messageHash: Buffer
-): boolean {
+): Promise<boolean> {
   const sig = Buffer.from(signatureBase64, 'base64');
   const pubkeyCompressed = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
 
   let pubkey: Uint8Array;
   try {
-    // Entpacke den komprimierten Public Key in 64-Byte x||y Format
-    pubkey = secp.Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
+    // Entpacke den komprimierten Public Key (noble-secp256k1)
+    pubkey = Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
   } catch (e) {
     console.error('Invalid pubkey format:', e);
     return false;
@@ -47,24 +44,23 @@ function verifySignature(
     }
     const compactSig = sig.slice(1);
     try {
-      const recoveredPubkeyRaw = secp.recover(messageHash, compactSig, recovery as 0 | 1 | 2 | 3, true);
-      if (!recoveredPubkeyRaw) {
-        console.log('Recovery failed: no pubkey recovered');
-        return false;
-      }
-      const recoveredPubkey = Buffer.from(recoveredPubkeyRaw);
-      const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
+      const recoveredPubkey = Point.fromHex(
+        Point.fromSignatureAndMessage(compactSig, messageHash, recovery).toHex(true)
+      ).toRawBytes(false).slice(1);
+
+      const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
       console.log('Derived address from recovery:', derivedAddress);
       if (!derivedAddress) {
         console.log('Derived address is undefined');
         return false;
       }
-      return secp.verify(compactSig, messageHash, pubkey);
+      return await nobleVerify(compactSig, messageHash, pubkey);
     } catch (err) {
       console.log('Error during signature verification:', err);
       return false;
     }
   }
+
   console.log('Signature length not 65 bytes, verification failed');
   return false;
 }
@@ -94,7 +90,7 @@ export async function GET(req: NextRequest) {
     const messageHash = bitcoinMessageHash(message);
 
     // Signatur prüfen
-    const validSignature = verifySignature(pubKey, signature, messageHash);
+    const validSignature = await verifySignature(pubKey, signature, messageHash);
 
     console.log('Signature valid:', validSignature);
 
@@ -113,7 +109,6 @@ export async function GET(req: NextRequest) {
       imagePreview,
       hqKeyRequestUrl,
     });
-
   } catch (err: any) {
     console.error('NFC verification error:', err);
     return NextResponse.json({
