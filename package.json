@@ -18,6 +18,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tiny-secp256k1": "^2.2.3",
+    "varuint-bitcoin": "^2.0.0",
     "wif": "^5.0.0"
   },
   "devDependencies": {
