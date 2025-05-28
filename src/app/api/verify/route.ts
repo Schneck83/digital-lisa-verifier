@@ -58,9 +58,8 @@ export async function GET(req: NextRequest) {
     let validSignature = false;
     try {
       const sig = Buffer.from(signature, 'base64');
-      validSignature = bitcoin.ECPair.fromPublicKeyBuffer
-        ? bitcoinMessage.verify(anchorHash, address, sig)
-        : false;
+      let validSignature = false;
+      // TODO: Echte BIP322-Prüfung hier einbauen
     } catch (err) {
       validSignature = false;
     }
