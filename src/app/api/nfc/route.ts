@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createHash } from 'crypto';
-import { Point, verify as nobleVerify } from 'noble-secp256k1';
+import { Point, verify as nobleVerify, recoverPublicKey } from 'noble-secp256k1';
 
 // Bitcoin-Message Hash nach BIP322
 function bitcoinMessageHash(message: string): Buffer {
@@ -44,9 +44,8 @@ async function verifySignature(
     }
     const compactSig = sig.slice(1);
     try {
-      const recoveredPubkey = Point.fromHex(
-        Point.fromSignatureAndMessage(compactSig, messageHash, recovery).toHex(true)
-      ).toRawBytes(false).slice(1);
+      const recoveredPubkeyCompressed = recoverPublicKey(messageHash, compactSig, recovery, true);
+      const recoveredPubkey = Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
 
       const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
       console.log('Derived address from recovery:', derivedAddress);
