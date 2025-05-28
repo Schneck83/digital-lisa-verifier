@@ -56,13 +56,13 @@ export async function GET(req: NextRequest) {
     const hash = bitcoin.crypto.sha256(bitcoin.crypto.sha256(messageBuffer));
 
     let validSignature = false;
-    try {
-      const sig = Buffer.from(signature, 'base64');
-      let validSignature = false;
-      // TODO: Echte BIP322-Prüfung hier einbauen
-    } catch (err) {
-      validSignature = false;
-    }
+try {
+  const sig = Buffer.from(signature, 'base64');
+  // TODO: Echte BIP322-Prüfung hier einbauen
+  // validSignature = prüfeSignatur(sig, hash, address);
+} catch (err) {
+  validSignature = false;
+}
 
     return NextResponse.json({
       lisaId,
