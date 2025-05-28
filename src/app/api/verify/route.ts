@@ -6,7 +6,7 @@ import { utils } from '@noble/secp256k1';
 
 // 🔁 Wandelt eine DER-codierte Signatur (z. B. von Ledger) in 64-Byte "raw" um
 function derToRawSignature(der: Uint8Array): Uint8Array {
-  const hex = utils.bytesToHex(der);
+  const hex = Buffer.from(der).toString('hex');
   try {
     if (hex.startsWith('30')) {
       const rLen = parseInt(hex.slice(6, 8), 16);
@@ -14,7 +14,7 @@ function derToRawSignature(der: Uint8Array): Uint8Array {
       const sOffset = 8 + rLen * 2 + 2;
       const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
       const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
-      return utils.hexToBytes(r + s);
+      return Buffer.from(r + s, 'hex');
     }
   } catch (e) {
     console.error('DER parsing failed:', e);
