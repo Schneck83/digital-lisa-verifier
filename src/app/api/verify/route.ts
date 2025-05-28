@@ -7,7 +7,7 @@ import { verify } from '@noble/secp256k1';
 function getLisaTx(id: string): { json: string, sig: string } {
   if (id === '0001') return {
     json: 'xXXekbk0xxUKia4EFkMfbWdbi1Pwn5GULAJJ5J-TXiI',
-    sig: '7eFxu_1xmh9R8K4N4dEHi7G1PZJ9VQ7CFXXE0yz_gkI'
+    sig: 'qNkRki18W_N_vUPXAnajK2ED7jviCjGeCK0SpjLpwFU'
   };
   if (id === '0002') return {
     json: 'Fat-f687B5YGUSJ8ga06iVAdm9nl5OLxxOwaxhfbeN8',
@@ -44,8 +44,11 @@ export async function GET(req: NextRequest) {
     const jsonData = JSON.parse(jsonText);
 
     // Lade Signature-Datei
-    const sigRes = await fetch(`https://arweave.net/${tx.sig}`);
-    const sigData = await sigRes.json();
+const sigRes = await fetch(`https://arweave.net/${tx.sig}`);
+if (!sigRes.ok) {
+  throw new Error(`Signature file not found for Lisa ID ${lisaId}`);
+}
+const sigData = await sigRes.json();
     const pubKey = sigData.public_key;
     const signature = Buffer.from(sigData.signature, 'base64').toString('hex');
     const hash = sha256(jsonText);
