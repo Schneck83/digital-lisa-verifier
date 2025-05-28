@@ -5,18 +5,27 @@ import { verify } from '@noble/secp256k1';
 // 📥 Signatur: entweder DER oder 64 Byte RAW → automatisch erkannt
 function parseSignature(sigBase64: string): Uint8Array {
   const sig = Buffer.from(sigBase64, 'base64');
-  if (sig.length === 64) {
-    return sig; // bereits RAW
-  } else {
+
+  // Wenn 64 Bytes lang → direkt als RAW behandeln
+  if (sig.length === 64) return sig;
+
+  // Wenn 65–72 Bytes lang → versuchen als DER
+  if (sig.length >= 65 && sig.length <= 72) {
     const hex = sig.toString('hex');
-    if (!hex.startsWith('30')) throw new Error('Not a DER signature');
-    const rLen = parseInt(hex.slice(6, 8), 16);
-    const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
-    const sOffset = 8 + rLen * 2 + 2;
-    const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
-    const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
-    return Buffer.from(r + s, 'hex');
+    if (!hex.startsWith('30')) throw new Error('Invalid DER header');
+    try {
+      const rLen = parseInt(hex.slice(6, 8), 16);
+      const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
+      const sOffset = 8 + rLen * 2 + 2;
+      const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
+      const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
+      return Buffer.from(r + s, 'hex');
+    } catch (e) {
+      throw new Error('DER parsing failed');
+    }
   }
+
+  throw new Error('Unrecognized signature format');
 }
 
 // Lisa-ID Mapping zu Arweave TXs
