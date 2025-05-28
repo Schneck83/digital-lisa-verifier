@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createHash } from 'crypto';
-import { Point, verify as nobleVerify, recoverPublicKey } from 'noble-secp256k1';
+import * as tinySecp from 'tiny-secp256k1';
 
-// Erzeugt den Bitcoin-Message Hash (BIP322 Standard)
+// Bitcoin-Message Hash nach BIP322
 function bitcoinMessageHash(message: string): Buffer {
   const prefix = Buffer.from('\x18Bitcoin Signed Message:\n', 'utf8');
   const messageBuffer = Buffer.from(message, 'utf8');
@@ -15,52 +15,45 @@ function bitcoinMessageHash(message: string): Buffer {
   return hash2;
 }
 
-// Prüft kompakte Signaturen (65 Bytes) inkl. Recovery-Byte
-// Rekonstruiert Public Key aus Signatur+Hash und vergleicht mit gegebenem PubKey
 async function verifySignature(
   pubKeyHex: string,
   signatureBase64: string,
   messageHash: Buffer
 ): Promise<boolean> {
   const sig = Buffer.from(signatureBase64, 'base64');
+  const pubkeyCompressed = Buffer.from(pubKeyHex, 'hex');
+
   if (sig.length !== 65) {
-    console.log('Ungültige Signatur-Länge:', sig.length);
+    console.log('Ungültige Signaturlänge:', sig.length);
     return false;
   }
 
-  const recovery = (sig[0] - 27) % 4;
+  const recovery = sig[0] - 27;
   if (recovery < 0 || recovery > 3) {
     console.log('Ungültiges Recovery-Byte:', recovery);
     return false;
   }
 
-  const compactSig = sig.slice(1); // 64 Bytes kompakte Signatur
+  const compactSig = sig.slice(1);
 
   try {
-    // Komprimierten Public Key aus Base16 (Hex) zu Uint8Array
-    const pubkeyCompressed = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
-    // Entpacke zu 64-Byte unkomprimiert (ohne Prefix)
-    const pubkey = Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
+    // Public Key aus Signatur + Hash rekonstruieren
+    const recoveredPubkey = tinySecp.recoverPublicKey(messageHash, compactSig, recovery);
 
-    // Rekonstruiere Public Key aus Signatur+Hash
-    const recoveredPubkeyCompressed = recoverPublicKey(messageHash, compactSig, recovery);
-    if (!recoveredPubkeyCompressed) {
-      console.log('Fehler: Konnte Public Key nicht rekonstruieren');
-      return false;
-    }
-    const recoveredPubkey = Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
+    // Abgeleitete Adresse aus recovered Pubkey
+    const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: recoveredPubkey }).address;
 
-    // Vergleiche den rekonstruierten Public Key mit dem übergebenen
-    if (!Buffer.from(pubkey).equals(Buffer.from(recoveredPubkey))) {
-      console.log('Rekonstruierter Public Key stimmt nicht mit übergebenem überein');
+    // Prüfe, ob recovered Address gleich der vom User angegebenen ist
+    const originalAddress = bitcoin.payments.p2wpkh({ pubkey: pubkeyCompressed }).address;
+    if (derivedAddress !== originalAddress) {
+      console.log('Recovered address stimmt nicht überein');
       return false;
     }
 
-    // Verifiziere die Signatur (ohne Recovery Byte) gegen den Public Key
-    const result = await nobleVerify(compactSig, messageHash, pubkey);
-    return result;
+    // Verifiziere Signatur (ohne Recovery Byte) gegen Public Key
+    return tinySecp.verifySignature(compactSig, messageHash, pubkeyCompressed);
   } catch (e) {
-    console.log('Fehler bei Signatur-Verifikation:', e);
+    console.log('Fehler bei Verifikation:', e);
     return false;
   }
 }
@@ -86,7 +79,7 @@ export async function GET(req: NextRequest) {
     console.log('Public Key:', pubKey);
     console.log('Signature (Base64):', signature);
 
-    // Erzeuge Bitcoin-Message Hash (BIP322)
+    // Bitcoin Message Hash erzeugen
     const messageHash = bitcoinMessageHash(message);
 
     // Signatur validieren
@@ -94,7 +87,7 @@ export async function GET(req: NextRequest) {
 
     console.log('Signatur gültig:', validSignature);
 
-    // Beispiel-Metadaten (kannst du durch echte Daten ersetzen)
+    // Dummy Meta-Daten (kannst du durch echte Daten ersetzen)
     const anchorName = `Digital Lisa #${lisaId}`;
     const imagePreview = `ar://OOqqylcAolOZbrnoEMmKmCyP9J3ZXiwkU6sCkT-dRU4`;
     const hqKeyRequestUrl = `https://verify.digital-lisa-club.xyz/request-key?lisa_id=${lisaId}`;
