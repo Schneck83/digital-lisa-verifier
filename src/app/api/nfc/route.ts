@@ -25,8 +25,17 @@ function verifySignature(
   messageHash: Buffer
 ): boolean {
   const sig = Buffer.from(signatureBase64, 'base64');
-  // WICHTIG: pubkey als Uint8Array, nicht als Buffer
-  const pubkey = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
+  const pubkeyCompressed = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
+
+  let pubkey: Uint8Array;
+  try {
+    // Entpacke den komprimierten Public Key in 64-Byte x||y Format
+    pubkey = secp.Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
+  } catch (e) {
+    console.error('Invalid pubkey format:', e);
+    return false;
+  }
+
   console.log('Signature length (bytes):', sig.length);
   console.log('Message hash:', messageHash.toString('hex'));
 
