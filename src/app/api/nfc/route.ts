@@ -17,7 +17,7 @@ function bitcoinMessageHash(message: string): Buffer {
 
 // Prüft kompakte Signaturen (65 Bytes) inkl. Recovery-Byte
 // Rekonstruiert Public Key aus Signatur+Hash und vergleicht mit gegebenem PubKey
-export async function verifySignature(
+async function verifySignature(
   pubKeyHex: string,
   signatureBase64: string,
   messageHash: Buffer
