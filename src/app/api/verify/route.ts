@@ -31,9 +31,6 @@ function parseSignature(sigBase64: string): Uint8Array {
   throw new Error('Unsupported signature format');
 }
 
-  throw new Error('Unrecognized signature format');
-}
-
 // Lisa-ID Mapping zu Arweave TXs
 function getLisaTx(id: string): { json: string; sig: string } {
   if (id === '0001') return {
