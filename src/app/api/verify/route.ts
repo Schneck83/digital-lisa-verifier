@@ -1,37 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
-import { verify } from '@noble/secp256k1';
+import * as bitcoin from 'bitcoinjs-lib';
+import * as secp from '@bitcoinerlab/secp256k1';
+import * as tinySecp from 'tiny-secp256k1';
 
-// 📥 Signatur: entweder DER oder 64 Byte RAW → automatisch erkannt
-function parseSignature(sigBase64: string): Uint8Array {
-  const sig = Buffer.from(sigBase64, 'base64');
+// Bitcoinjs muss mit tiny-secp256k1 arbeiten
+bitcoin.initEccLib(tinySecp);
 
-  if (sig.length === 64) return sig;
-
-  // 65-Byte Compact Format → Recovery-Byte entfernen
-  if (sig.length === 65) {
-    return sig.subarray(1); // ohne erstes Byte
-  }
-
-  // Gültige DER-Signatur erkennen und umwandeln
-  if (sig.length >= 65 && sig.length <= 72 && sig[0] === 0x30) {
-    try {
-      const hex = sig.toString('hex');
-      const rLen = parseInt(hex.slice(6, 8), 16);
-      const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
-      const sOffset = 8 + rLen * 2 + 2;
-      const sLen = parseInt(hex.slice(sOffset - 2, sOffset), 16);
-      const s = hex.slice(sOffset, sOffset + sLen * 2).padStart(64, '0');
-      return Buffer.from(r + s, 'hex');
-    } catch (e) {
-      throw new Error('DER parsing failed');
-    }
-  }
-
-  throw new Error('Unsupported signature format');
-}
-
-// Lisa-ID Mapping zu Arweave TXs
 function getLisaTx(id: string): { json: string; sig: string } {
   if (id === '0001') return {
     json: 'xXXekbk0xxUKia4EFkMfbWdbi1Pwn5GULAJJ5J-TXiI',
@@ -48,6 +23,29 @@ function getLisaTx(id: string): { json: string; sig: string } {
   return { json: '', sig: '' };
 }
 
+// Hauptfunktion zur Prüfung einer BIP322-Signatur
+function verifySignatureBIP322(address: string, messageHash: Buffer, signatureBase64: string): boolean {
+  try {
+    const sig = Buffer.from(signatureBase64, 'base64');
+
+    // 65-Byte: Compact + Recovery → Recovery Byte abspalten
+    if (sig.length !== 65) throw new Error('Unexpected signature length');
+    const recovery = sig[0] - 27;
+    const signature = sig.slice(1);
+
+    if (recovery < 0 || recovery > 3) throw new Error('Invalid recovery byte');
+
+    // PubKey aus Recovery wiederherstellen
+    const pubkey = Buffer.from(secp.recoverPublicKey(messageHash, signature, recovery, true));
+    const { address: derived } = bitcoin.payments.p2wpkh({ pubkey });
+
+    return derived === address;
+  } catch (err) {
+    console.error('verifySignatureBIP322 error:', err);
+    return false;
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -61,27 +59,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unknown Lisa ID' }, { status: 404 });
     }
 
+    // Lade JSON-Anchor
     const jsonRes = await fetch(`https://arweave.net/${tx.json}`);
     const jsonText = await jsonRes.text();
     const jsonData = JSON.parse(jsonText);
 
+    // Lade Signature-Datei
     const sigRes = await fetch(`https://arweave.net/${tx.sig}`);
     if (!sigRes.ok) throw new Error(`Signature file not found`);
     const sigData = await sigRes.json();
 
-    const hash = Buffer.from(jsonData.anchor_hash, 'hex');
-    const pubKey = sigData.public_key;
-    const signatureRaw = parseSignature(sigData.signature);
+    const anchorHash = Buffer.from(jsonData.anchor_hash, 'hex');
+    const address = sigData.address;
+    const signature = sigData.signature;
 
-    const validSignature = await verify(signatureRaw, hash, pubKey);
+    const validSignature = verifySignatureBIP322(address, anchorHash, signature);
 
     return NextResponse.json({
       lisaId,
       anchorName: jsonData.name,
       imagePreview: jsonData.image_preview,
       hqKeyRequestUrl: jsonData.hq_key_request_url,
-      pubKey,
-      signature: sigData.signature,
+      address,
+      signature,
       validSignature
     });
 

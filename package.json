@@ -9,6 +9,7 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "@bitcoinerlab/secp256k1": "^1.2.0",
     "@noble/curves": "^1.9.1",
     "@noble/secp256k1": "^2.2.3",
     "bitcoinjs-lib": "^6.1.7",
