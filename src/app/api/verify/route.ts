@@ -6,14 +6,17 @@ import { verify } from '@noble/secp256k1';
 function parseSignature(sigBase64: string): Uint8Array {
   const sig = Buffer.from(sigBase64, 'base64');
 
-  // Wenn 64 Bytes lang → direkt als RAW behandeln
   if (sig.length === 64) return sig;
 
-  // Wenn 65–72 Bytes lang → versuchen als DER
-  if (sig.length >= 65 && sig.length <= 72) {
-    const hex = sig.toString('hex');
-    if (!hex.startsWith('30')) throw new Error('Invalid DER header');
+  // 65-Byte Compact Format → Recovery-Byte entfernen
+  if (sig.length === 65) {
+    return sig.subarray(1); // ohne erstes Byte
+  }
+
+  // Gültige DER-Signatur erkennen und umwandeln
+  if (sig.length >= 65 && sig.length <= 72 && sig[0] === 0x30) {
     try {
+      const hex = sig.toString('hex');
       const rLen = parseInt(hex.slice(6, 8), 16);
       const r = hex.slice(8, 8 + rLen * 2).padStart(64, '0');
       const sOffset = 8 + rLen * 2 + 2;
@@ -24,6 +27,9 @@ function parseSignature(sigBase64: string): Uint8Array {
       throw new Error('DER parsing failed');
     }
   }
+
+  throw new Error('Unsupported signature format');
+}
 
   throw new Error('Unrecognized signature format');
 }
