@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Buffer } from 'buffer';
 import * as bitcoin from 'bitcoinjs-lib';
 import { createHash } from 'crypto';
-import * as secp from '@noble/secp256k1';
+import * as secp from 'noble-secp256k1';
 
 // Bitcoin-Message Hash nach BIP322
 function bitcoinMessageHash(message: string): Buffer {
@@ -36,18 +36,12 @@ async function verifySignature(
   const compactSig = sig.slice(1);
 
   try {
-    // Public Key als Uint8Array
     const pubkeyCompressed = Uint8Array.from(Buffer.from(pubKeyHex, 'hex'));
-    // Unkomprimierten Public Key (64 Byte) extrahieren
     const pubkey = secp.Point.fromHex(pubkeyCompressed).toRawBytes(false).slice(1);
 
-    // Public Key aus Signatur & Hash rekonstruieren
     const recoveredPubkeyCompressed = secp.recoverPublicKey(messageHash, compactSig, recovery, true);
-
-    // Unkomprimierten recovered Public Key
     const recoveredPubkey = secp.Point.fromHex(recoveredPubkeyCompressed).toRawBytes(false).slice(1);
 
-    // Adressen ableiten
     const derivedAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(recoveredPubkey) }).address;
     const originalAddress = bitcoin.payments.p2wpkh({ pubkey: Buffer.from(pubkey) }).address;
 
@@ -56,7 +50,6 @@ async function verifySignature(
       return false;
     }
 
-    // Signatur validieren
     return await secp.verify(compactSig, messageHash, pubkey);
   } catch (e) {
     console.log('Fehler bei Verifikation:', e);
@@ -77,7 +70,6 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Fehlende Parameter' }, { status: 400 });
     }
 
-    // Nachricht wie beim Signieren zusammensetzen
     const message = `uid=${uid}&lisa_id=${lisaId}`;
 
     console.log('Verifiziere NFC Signatur mit Parametern:');
@@ -85,15 +77,12 @@ export async function GET(req: NextRequest) {
     console.log('Public Key:', pubKey);
     console.log('Signature (Base64):', signature);
 
-    // Bitcoin Message Hash erzeugen
     const messageHash = bitcoinMessageHash(message);
 
-    // Signatur validieren
     const validSignature = await verifySignature(pubKey, signature, messageHash);
 
     console.log('Signatur gültig:', validSignature);
 
-    // Dummy Meta-Daten (kannst du durch echte Daten ersetzen)
     const anchorName = `Digital Lisa #${lisaId}`;
     const imagePreview = `ar://OOqqylcAolOZbrnoEMmKmCyP9J3ZXiwkU6sCkT-dRU4`;
     const hqKeyRequestUrl = `https://verify.digital-lisa-club.xyz/request-key?lisa_id=${lisaId}`;
